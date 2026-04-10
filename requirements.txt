@@ -1,0 +1,6 @@
+requests
+pytz
+pandas
+gspread
+playwright
+nest_asyncio
