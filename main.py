@@ -15,12 +15,11 @@ from datetime import timedelta, datetime
 from collections import Counter
 from email.message import EmailMessage
 from google.oauth2.service_account import Credentials
+from gspread_dataframe import set_with_dataframe
 from urllib.parse import quote
 from playwright.async_api import async_playwright
-# مكتبة ضرورية لتشغيل دالة set_with_dataframe الموجودة في كودك
-from gspread_dataframe import set_with_dataframe
 
-# تفعيل nest_asyncio لضمان عمل Playwright بدون مشاكل
+# تفعيل nest_asyncio
 nest_asyncio.apply()
 
 # --- إعدادات الحماية (GitHub Secrets) ---
@@ -51,7 +50,7 @@ FIELDS = {
     "ARABI_SIZE": 11183503
 }
 
-# --- الجزء الأول: الدوال المساعدة (Helpers) كما هي في كودك ---
+# --- HELPERS (الجزء الأول) ---
 def zenput_headers():
     return {"X-API-TOKEN": API_KEY, "Accept": "application/json"}
 
@@ -94,10 +93,11 @@ def parse_zenput_value(val):
     if val_str == "false": return "No"
     return str(val).strip() if val is not None else ""
 
-# --- الجزء الثاني: سحب ومعالجة البيانات من Zenput ---
+# --- FETCH & PROCESS (الجزء الأول) ---
 def fetch_submissions_dynamic(template_id):
     all_submissions = []
-    start, limit = 0, 50
+    start = 0
+    limit = 50
     today_str = datetime.now(TZ).strftime("%Y-%m-%d") 
     print(f"🚀 Starting Extraction Task (Target Date: {today_str})")
     while len(all_submissions) < MAX_RECORDS:
@@ -209,7 +209,7 @@ def process_quality_bread_submissions_to_df(submissions):
         rows.append(row_data)
     return pd.DataFrame(rows)
 
-# --- الجزء الثالث: قالب الـ HTML كما هو في كودك ---
+# --- إعدادات الجزء الثاني (HTML TEMPLATE) ---
 html_template = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -228,23 +228,42 @@ html_template = """
             --color-orange-dark: #c2410c; --color-red: #ef4444;
         }
         body { font-family: 'Tajawal', sans-serif; background-color: var(--bg-color); color: var(--text-primary); margin: 0; padding: 20px; }
+        @media print {
+            body { background-color: white; }
+            .card { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 20px; box-shadow: none !important; border: 1px solid #eee !important; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+            thead { display: table-header-group; }
+            #dashboard-to-export { width: 100% !important; padding: 0 !important; }
+        }
         #dashboard-to-export { padding: 10px; background-color: var(--bg-color); width: 1100px; margin: auto; }
         .dashboard-container { display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px; }
         .header { grid-column: 1 / -1; margin-bottom: 16px; }
         .header h1 { margin: 0; font-size: 2.25rem; font-weight: 700; }
-        .card { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; }
-        .card.kpi { grid-column: span 3; text-align: center; }
-        .value { font-size: 2.5rem; font-weight: 700; margin: 0; }
+        .header p { margin: 4px 0 0; font-size: 1.1rem; color: var(--text-secondary); }
+        .card { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .card.kpi { grid-column: span 3; }
+        .card.chart { grid-column: span 6; }
+        .card.table-card { grid-column: span 12; }
+        .card-title { font-size: 1.1rem; font-weight: 600; color: var(--text-secondary); margin: 0 0 16px 0; }
+        .kpi .value { font-size: 2.5rem; font-weight: 700; margin: 0; }
+        .kpi .value .icon { font-size: 1.5rem; vertical-align: middle; margin-right: 8px; }
         .value.orange { color: var(--color-orange); }
         .value.red { color: var(--color-red); }
-        .bar-item { display: flex; align-items: center; margin-bottom: 12px; }
-        .bar-label { width: 35%; font-size: 0.9rem; color: var(--text-secondary); }
+        .bar-item { display: flex; align-items: center; margin-bottom: 12px; font-size: 0.9rem; }
+        .bar-label { width: 35%; white-space: nowrap; color: var(--text-secondary); padding-left: 10px; }
         .bar-wrapper { flex-grow: 1; background-color: #f3f4f6; border-radius: 6px; height: 24px; }
-        .bar { height: 100%; background: var(--color-orange); border-radius: 6px; color: #fff; padding-right: 8px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; border-bottom: 1px solid var(--border-color); text-align: right; }
+        .bar { height: 100%; background: linear-gradient(90deg, var(--color-orange), #fdba74); border-radius: 6px; display: flex; align-items: center; justify-content: flex-start; color: #fff; font-weight: 700; font-size: 0.8rem; padding-right: 8px; box-sizing: border-box; }
+        .table-wrapper { width: 100%; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; text-align: right; }
+        th, td { padding: 12px 16px; font-size: 0.9rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
         thead { background-color: #f1f5f9; }
-        .issue-photo { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd; }
+        th { font-weight: 700; color: var(--text-secondary); }
+        td .status-badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-weight: 500; font-size: 0.8rem; }
+        td .status-badge.quality { background-color: #fee2e2; color: #b91c1c; }
+        td .status-badge.size { background-color: #ffedd5; color: #9a3412; }
+        td .status-badge.color { background-color: #dbeafe; color: #1e40af; }
+        .photo-container { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .issue-photo { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 2px solid var(--border-color); }
     </style>
 </head>
 <body>
@@ -254,15 +273,38 @@ html_template = """
                 <h1>لوحة تحكم مراقبة الجودة</h1>
                 <p>تحليل لـ {{total_reports}} تقرير جودة حديث</p>
             </header>
-            <div class="card kpi"><h3>معدل الجودة العام</h3><p class="value">{{quality_rate}}%</p></div>
-            <div class="card kpi"><h3>إجمالي المشاكل</h3><p class="value red">{{total_issues}}</p></div>
-            <div class="card kpi"><h3>الفروع المتأثرة</h3><p class="value orange">{{branches_with_issues}}</p></div>
-            <div class="card kpi"><h3>إجمالي التقارير</h3><p class="value">{{total_reports}}</p></div>
-            <div class="card table-card" style="grid-column: span 12;">
-                <table>
-                    <thead><tr><th>الفرع</th><th>المنتج</th><th>فئة المشكلة</th><th>المشكلة</th><th>الصورة</th></tr></thead>
-                    <tbody>{{issues_table_rows}}</tbody>
-                </table>
+            <div class="card kpi">
+                <h2>معدل الجودة العام</h2>
+                <p class="value">{{quality_rate}}% <span class="icon">✅</span></p>
+            </div>
+            <div class="card kpi">
+                <h2>إجمالي المشاكل</h2>
+                <p class="value red">{{total_issues}} <span class="icon">🚩</span></p>
+            </div>
+            <div class="card kpi">
+                <h2>الفروع المتأثرة</h2>
+                <p class="value orange">{{branches_with_issues}} <span class="icon">🏢</span></p>
+            </div>
+            <div class="card kpi">
+                <h2>إجمالي التقارير</h2>
+                <p class="value">{{total_reports}} <span class="icon">📋</span></p>
+            </div>
+            <div class="card chart">
+                <h2 class="card-title">المشاكل حسب الفرع</h2>
+                {{branch_issues_bars}}
+            </div>
+            <div class="card chart">
+                <h2 class="card-title">المشاكل حسب نوع المنتج</h2>
+                {{product_issues_bars}}
+            </div>
+            <div class="card table-card">
+                <h2 class="card-title">سجل المشاكل التفصيلي</h2>
+                <div class="table-wrapper">
+                    <table>
+                        <thead><tr><th>الفرع</th><th>المنتج</th><th>فئة المشكلة</th><th>المشكلة / ملاحظة</th><th>صورة المشكلة</th></tr></thead>
+                        <tbody>{{issues_table_rows}}</tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -270,26 +312,50 @@ html_template = """
 </html>
 """
 
-# --- الجزء الرابع: دوال التقرير النهائي (PDF & Email) ---
+# --- HELPERS (الجزء الثاني) ---
 def get_image_as_base64(url):
     if not isinstance(url, str) or not url.startswith('http'): 
         match = re.search(r'HYPERLINK\("([^"]+)"', url)
         if match: url = match.group(1)
         else: return None
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        response = requests.get(url, timeout=15)
+        response = requests.get(url, timeout=15, headers=headers)
         if response.status_code == 200:
             encoded_string = base64.b64encode(response.content).decode('utf-8')
-            return f"data:image/jpeg;base64,{encoded_string}"
+            return f"data:{response.headers.get('Content-Type', 'image/jpeg')};base64,{encoded_string}"
     except: pass
     return None
 
-async def export_to_pdf(html_content, pdf_path):
+def get_metric_from_question(question):
+    q_lower = str(question).lower()
+    if 'color' in q_lower: return 'اللون'
+    if 'quality' in q_lower: return 'الجودة'
+    if 'size' in q_lower: return 'الحجم'
+    return 'غير محدد'
+
+def create_bar_chart_html(data_counter, max_items=5):
+    if not data_counter: return "<p>لا توجد بيانات لعرضها.</p>"
+    top_items = data_counter.most_common(max_items)
+    max_value = top_items[0][1] if top_items else 1
+    html = ""
+    for item, count in top_items:
+        percentage = (count / max_value) * 100
+        html += f'<div class="bar-item"><div class="bar-label">{item}</div><div class="bar-wrapper"><div class="bar" style="width: {percentage}%;">{count}</div></div></div>'
+    return html
+
+async def export_to_pdf(html_path, pdf_path):
     async with async_playwright() as p:
-        browser = await p.chromium.launch(args=["--no-sandbox"])
+        browser = await p.chromium.launch(args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
         page = await browser.new_page()
-        await page.set_content(html_content)
-        await page.pdf(path=pdf_path, format="A4", print_background=True, landscape=True)
+        await page.set_viewport_size({"width": 1200, "height": 800})
+        abs_path = f"file://{os.path.abspath(html_path)}"
+        await page.goto(abs_path, wait_until="networkidle", timeout=90000)
+        await page.evaluate("document.fonts.ready")
+        await page.pdf(
+            path=pdf_path, format="A4", print_background=True, 
+            landscape=True, margin={"top":"15mm","bottom":"15mm","left":"10mm","right":"10mm"}
+        )
         await browser.close()
 
 def send_final_email(pdf_path, stats):
@@ -306,7 +372,7 @@ def send_final_email(pdf_path, stats):
         smtp.login(SENDER_EMAIL, APP_PASSWORD)
         smtp.send_message(msg)
 
-# --- الجزء الخامس: التنفيذ النهائي (Main) ---
+# --- التنفيذ النهائي (MAIN EXECUTION) ---
 async def main():
     try:
         # 1. جلب ومعالجة البيانات
@@ -314,53 +380,81 @@ async def main():
         final_df = process_quality_bread_submissions_to_df(data_raw)
         
         if final_df.empty:
-            print("⚠️ No data found today.")
+            print("⚠️ No data found for the specified date.")
             return
 
-        # 2. تحديث جوجل شيت
+        # تحديث شيت جوجل باستخدام المصادقة الآلية
         scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         creds = Credentials.from_service_account_info(json.loads(GOOGLE_JSON_STR), scopes=scopes)
         gc = gspread.authorize(creds)
         sheet = gc.open_by_key(GOOGLE_SHEET_ID).get_worksheet(0)
         sheet.clear()
-        set_with_dataframe(sheet, final_df)
+        set_with_dataframe(sheet, final_df, row=1, col=1, include_index=False, include_column_header=True)
+        print("🎉 Google Sheet updated successfully!")
 
-        # 3. تحليل المشاكل لبناء التقرير المرئي
+        # 2. تحليل المشاكل
+        print("⏳ جاري تحليل المشاكل وتجهيز التقرير الـ PDF...")
         product_groups = ['خبز شاورما', 'خبز طرابيش', 'خبز عربي']
-        question_cols = [c for c in final_df.columns if '?' in str(c)]
         all_checks, issues = [], []
+        col_list = list(final_df.columns)
+        question_cols = [col for col in col_list if '?' in str(col)]
 
         for _, row in final_df.iterrows():
-            for i, q_col in enumerate(question_cols):
-                ans = str(row.get(q_col, '')).lower()
-                all_checks.append(ans == 'yes')
-                if ans != 'yes' and ans != '':
-                    q_idx = list(final_df.columns).index(q_col)
-                    photo_url = row.get(final_df.columns[q_idx + 1], '')
-                    b64 = get_image_as_base64(photo_url)
+            branch = row['Location']
+            for i, q_col_name in enumerate(question_cols):
+                product = product_groups[(i // 3) % 3]
+                metric = get_metric_from_question(q_col_name)
+                answer = row.get(q_col_name)
+                if pd.isna(answer): continue
+                answer_str = str(answer).strip().lower()
+                is_issue = (answer_str != 'yes')
+                all_checks.append(is_issue)
+                if is_issue:
+                    q_idx = col_list.index(q_col_name)
+                    raw_photo_val = str(row.get(col_list[q_idx + 1], ''))
+                    photo_urls = re.findall(r'https?://[^\s"]+', raw_photo_val)
+                    notes = row.get(col_list[q_idx + 2], '')
                     issues.append({
-                        'branch': row['Location'], 'product': product_groups[(i//3)%3],
-                        'metric': 'الجودة', 'problem': 'غير مطابق', 'img': b64
+                        'branch': branch, 'product': product, 'metric': metric, 
+                        'problem': str(answer) if answer_str != 'no' else f"{metric} غير جيد", 
+                        'notes': str(notes) if pd.notna(notes) else '', 'photo_urls': photo_urls
                     })
 
-        # 4. بناء صفوف الجدول وحساب الإحصائيات
-        rows_html = "".join([f"<tr><td>{x['branch']}</td><td>{x['product']}</td><td>{x['metric']}</td><td>{x['problem']}</td><td><img src='{x['img']}' class='issue-photo'></td></tr>" for x in issues if x['img']])
-        rate = (sum(all_checks)/len(all_checks)*100) if all_checks else 100
-        
-        final_content = html_template.replace('{{quality_rate}}', f"{rate:.1f}")\
-                                     .replace('{{total_issues}}', str(len(issues)))\
-                                     .replace('{{total_reports}}', str(len(final_df)))\
-                                     .replace('{{branches_with_issues}}', str(len(set(x['branch'] for x in issues))))\
-                                     .replace('{{issues_table_rows}}', rows_html)
+        # بناء صفوف الجدول
+        table_rows_html = ""
+        for issue in issues:
+            photo_html = '<div class="photo-container">'
+            for url in issue['photo_urls']:
+                b64 = get_image_as_base64(url)
+                if b64: photo_html += f'<img src="{b64}" class="issue-photo">'
+            photo_html += '</div>' if issue['photo_urls'] else 'لا توجد صورة'
+            category_map = {'اللون': 'color', 'الجودة': 'quality', 'الحجم': 'size'}
+            badge = category_map.get(issue['metric'], 'availability')
+            table_rows_html += f"<tr><td>{issue['branch']}</td><td>{issue['product']}</td><td><span class='status-badge {badge}'>{issue['metric']}</span></td><td>{issue['problem']}<br><small>{issue['notes']}</small></td><td>{photo_html}</td></tr>"
 
-        # 5. تصدير PDF وإرسال إيميل
-        pdf_name = f"Report_{datetime.now(TZ).strftime('%Y-%m-%d')}.pdf"
-        await export_to_pdf(final_content, pdf_name)
-        send_final_email(pdf_name, {'rate': round(rate, 1), 'issues': len(issues)})
-        print("✅ التقرير جاهز وتم الإرسال بنجاح!")
+        # حساب النسب وحقن البيانات
+        quality_rate = ((len(all_checks) - len(issues)) / len(all_checks) * 100) if all_checks else 100
+        final_html = html_template.replace('{{total_reports}}', str(len(final_df)))\
+                                  .replace('{{quality_rate}}', f"{quality_rate:.1f}")\
+                                  .replace('{{total_issues}}', str(len(issues)))\
+                                  .replace('{{branches_with_issues}}', str(len(set(i['branch'] for i in issues))))\
+                                  .replace('{{branch_issues_bars}}', create_bar_chart_html(Counter(i['branch'] for i in issues)))\
+                                  .replace('{{product_issues_bars}}', create_bar_chart_html(Counter(i['product'] for i in issues)))\
+                                  .replace('{{issues_table_rows}}', table_rows_html)
+
+        # حفظ ومعالجة PDF
+        with open('report.html', 'w', encoding='utf-8') as f: f.write(final_html)
+        print("📡 جاري تحويل HTML إلى PDF...")
+        current_date = datetime.now(TZ).strftime("%Y-%m-%d")
+        pdf_name = f'Bread_Quality_Report_{current_date}.pdf'
+        await export_to_pdf('report.html', pdf_name)
+        
+        # إرسال الإيميل
+        send_final_email(pdf_name, {'rate': round(quality_rate, 1), 'issues': len(issues)})
+        print("✅ تم استخراج التقرير بنجاح وتحديث الشيت وإرسال الإيميل!")
 
     except Exception as e:
-        print(f"❌ حدث خطأ: {e}")
+        print(f"❌ حدث خطأ أثناء التشغيل: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
