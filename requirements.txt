@@ -1,6 +1,9 @@
 requests
 pytz
 pandas
+numpy
 gspread
+gspread-dataframe
+google-auth
 playwright
-nest_asyncio
+nest-asyncio
