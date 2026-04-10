@@ -1,0 +1,32 @@
+name: Daily Bread Quality Report
+
+on:
+  schedule:
+    # سيتم التشغيل يومياً الساعة 7 صباحاً بتوقيت جرينتش (مثلاً 10 صباحاً بتوقيت العراق)
+    - cron: '0 7 * * *'
+  workflow_dispatch: # يتيح لك تشغيل الكود يدوياً للتجربة
+
+jobs:
+  run-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+
+      - name: Run Python Script
+        env:
+          ZENPUT_API_KEY: ${{ secrets.ZENPUT_API_KEY }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python main.py
