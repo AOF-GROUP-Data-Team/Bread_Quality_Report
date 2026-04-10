@@ -358,16 +358,52 @@ async def export_to_pdf(html_path, pdf_path):
         )
         await browser.close()
 
-def send_final_email(pdf_path, stats):
+def send_final_email(pdf_path, stats, issues_list):
     msg = EmailMessage()
     today = datetime.now(TZ).strftime("%Y-%m-%d")
+    
+    # تحديد المنتجات التي بها مشاكل لإضافتها في نص الرسالة
+    troubled_products = list(set(i['product'] for i in issues_list))
+    products_str = "، ".join(troubled_products) if troubled_products else "لا توجد"
+
     msg['Subject'] = f'📊 تقرير جودة الخبز اليومي - {today}'
     msg['From'] = SENDER_EMAIL
     msg['To'] = ", ".join(RECIPIENTS_TO)
     msg['Cc'] = ", ".join(RECIPIENTS_CC)
-    msg.set_content(f"تحية طيبة، مرفق تقرير جودة الخبز ليوم {today}.\nالجودة: {stats['rate']}%\nالمشاكل: {stats['issues']}")
+
+    # صياغة الرسالة (Email Body)
+    email_content = f"""السادة إدارة المشتريات المحترمين،
+
+تحية طيبة،،
+
+مرفق لكم التقرير التفصيلي لجودة أنواع الخبز في الفروع ليوم {today}.
+
+بناءً على التقارير المرفوعة، نود إحاطتكم بالنتائج التالية:
+- معدل الجودة العام: {stats['rate']}%
+- إجمالي عدد الملحوظات: {stats['issues']} ملحوظة.
+- المنتجات المتأثرة: {products_str}
+
+نرجو منكم التحقق واتخاذ اللازم بشكل عاجل مع الموردين لضمان ثبات جودة المنتجات وتفادي تكرار هذه الملحوظات مستقبلاً.
+
+كما نؤكد على جميع الفروع ضرورة الالتزام برفع تقارير الجودة في مواعيدها المحددة لضمان سرعة المعالجة واستقرار مستوى المنتجات.
+
+شاكرين لكم تعاونكم.
+
+مرسل آلياً | نظام مراقبة الجودة
+"""
+    
+    msg.set_content(email_content)
+
+    # إرفاق ملف الـ PDF
     with open(pdf_path, 'rb') as f:
-        msg.add_attachment(f.read(), maintype='application', subtype='pdf', filename=os.path.basename(pdf_path))
+        msg.add_attachment(
+            f.read(), 
+            maintype='application', 
+            subtype='pdf', 
+            filename=os.path.basename(pdf_path)
+        )
+
+    # عملية الإرسال
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
         smtp.login(SENDER_EMAIL, APP_PASSWORD)
         smtp.send_message(msg)
@@ -450,7 +486,8 @@ async def main():
         await export_to_pdf('report.html', pdf_name)
         
         # إرسال الإيميل
-        send_final_email(pdf_name, {'rate': round(quality_rate, 1), 'issues': len(issues)})
+        # send_final_email(pdf_name, {'rate': round(quality_rate, 1), 'issues': len(issues)})
+        send_final_email(pdf_name, {'rate': round(quality_rate, 1), 'issues': len(issues)}, issues)
         print("✅ تم استخراج التقرير بنجاح وتحديث الشيت وإرسال الإيميل!")
 
     except Exception as e:
