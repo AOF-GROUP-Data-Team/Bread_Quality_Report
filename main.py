@@ -1,1 +1,366 @@
+import requests
+import pytz
+import pandas as pd
+import numpy as np
+import io
+import re
+import asyncio
+import nest_asyncio
+import os
+import base64
+import smtplib
+import gspread
+import json
+from datetime import timedelta, datetime
+from collections import Counter
+from email.message import EmailMessage
+from google.oauth2.service_account import Credentials
+from urllib.parse import quote
+from playwright.async_api import async_playwright
+# مكتبة ضرورية لتشغيل دالة set_with_dataframe الموجودة في كودك
+from gspread_dataframe import set_with_dataframe
 
+# تفعيل nest_asyncio لضمان عمل Playwright بدون مشاكل
+nest_asyncio.apply()
+
+# --- إعدادات الحماية (GitHub Secrets) ---
+API_KEY         = os.environ.get('ZENPUT_API_KEY')
+APP_PASSWORD    = os.environ.get('GMAIL_APP_PASSWORD')
+GOOGLE_JSON_STR = os.environ.get('GOOGLE_CREDENTIALS') 
+
+# إعدادات الإيميل
+SENDER_EMAIL    = "mohamed.hegazy010091@gmail.com"
+RECIPIENTS_TO   = ["Mohamed.hegazy8555@gmail.com"]
+RECIPIENTS_CC   = ["m.hejazi@aofgroup.com"]
+
+# إعدادات المشروع الأساسية
+TEMPLATE_ID     = 659312
+TZ              = pytz.timezone("Asia/Baghdad")
+GOOGLE_SHEET_ID = "1bestuz83Y-6o470OHF-J8dx6CxE4J9goJcj6jnOx5Ds"
+MAX_RECORDS     = 5000
+
+FIELDS = {
+    "SHAWARMA_COLOR": 11183491, 
+    "SHAWARMA_QUALITY": 11183493,
+    "SHAWARMA_SIZE": 11183495,
+    "TARABESH_COLOR": 11707959, 
+    "TARABESH_QUALITY": 11707961,
+    "TARABESH_SIZE": 11707963,
+    "ARABI_COLOR": 11183499,
+    "ARABI_QUALITY": 11183501,
+    "ARABI_SIZE": 11183503
+}
+
+# --- الجزء الأول: الدوال المساعدة (Helpers) كما هي في كودك ---
+def zenput_headers():
+    return {"X-API-TOKEN": API_KEY, "Accept": "application/json"}
+
+def get_zenput_signed_url(s3_path):
+    if not s3_path: return ""
+    storage_api_url = f"https://www.zenput.com/api/v2/users/current/storage/?path={quote(s3_path)}"
+    try:
+        response = requests.get(storage_api_url, headers=zenput_headers(), timeout=10)
+        if response.status_code == 200:
+            return response.json().get('data', {}).get('location', "")
+        else:
+            return f"https://www.zenput.com/api/v3/files/download?s3_key={s3_path}"
+    except: return ""
+
+def format_milliseconds_to_hms(ms_value):
+    try:
+        if ms_value is None or ms_value == "" or float(ms_value) < 0: return "00:00:00"
+        total_seconds = int(float(ms_value) / 1000)
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    except: return "00:00:00"
+
+def parse_zenput_value(val):
+    if isinstance(val, list) and len(val) > 0:
+        if isinstance(val[0], dict) and "s3_key" in val[0]:
+            signed_links = []
+            for item in val:
+                s3_key = item.get('s3_key')
+                if s3_key:
+                    real_link = get_zenput_signed_url(s3_key)
+                    if real_link: signed_links.append(real_link)
+            if not signed_links: return ""
+            if len(signed_links) == 1: return f'=HYPERLINK("{signed_links[0]}", "View Photo")'
+            return "\n".join(signed_links)
+        return ", ".join(str(v) for v in val)
+    val_str = str(val).strip().lower()
+    if val_str == "true": return "Yes"
+    if val_str == "false": return "No"
+    return str(val).strip() if val is not None else ""
+
+# --- الجزء الثاني: سحب ومعالجة البيانات من Zenput ---
+def fetch_submissions_dynamic(template_id):
+    all_submissions = []
+    start, limit = 0, 50
+    today_str = datetime.now(TZ).strftime("%Y-%m-%d") 
+    print(f"🚀 Starting Extraction Task (Target Date: {today_str})")
+    while len(all_submissions) < MAX_RECORDS:
+        params = {"form_template_id": template_id, "limit": limit, "offset": start, "date_submitted_start": today_str}
+        resp = requests.get("https://www.zenput.com/api/v3/submissions/", headers=zenput_headers(), params=params)
+        if resp.status_code != 200: break
+        batch = resp.json().get("data", [])
+        if not batch: break
+        for s in batch:
+            meta = s.get("smetadata") or {}
+            date_raw = meta.get("date_submitted_local", "")
+            if date_raw and date_raw.startswith(today_str): all_submissions.append(s)
+        start += limit
+        if len(batch) < limit: break
+    print(f"✅ Total submissions retrieved: {len(all_submissions)}")
+    return all_submissions
+
+def process_quality_bread_submissions_to_df(submissions):
+    if not submissions: return pd.DataFrame()
+    rows = []
+    for s in submissions:
+        meta = s.get("smetadata") or {}
+        answers = s.get("answers") or []
+        ans_dict = {str(a.get("field_id")): a for a in answers if isinstance(a, dict)}
+        location_obj = meta.get("location") or {}
+        location_name = location_obj.get("name", "")
+        external_key = location_obj.get("external_key", "")
+        sub_id = s.get("id", "")
+        legacy_sub_id = s.get("legacy_submission_id", "")
+        lat, lon = meta.get("lat", ""), meta.get("lon", "")
+
+        def get_val_with_quality_check(field_id):
+            ans = ans_dict.get(str(field_id), {})
+            raw_val = ans.get("value")
+            display_val = parse_zenput_value(raw_val)
+            if display_val == "Yes": return "Yes"
+            for i, a in enumerate(answers):
+                if str(a.get("field_id")) == str(field_id):
+                    for j in range(i + 1, min(i + 4, len(answers))):
+                        curr_field = answers[j]
+                        if curr_field.get("field_type") in ["photo", "image"]:
+                            p_data = curr_field.get("value") or curr_field.get("image_value")
+                            if isinstance(p_data, list) and len(p_data) > 0:
+                                img_meta = p_data[0]
+                                var = img_meta.get('laplacian_variance', 999)
+                                if var < 5 or img_meta.get('is_low_quality') is True: return "Yes"
+                                else: return "No"
+            return display_val
+
+        def get_photo_after_id(field_id):
+            for i, ans in enumerate(answers):
+                if str(ans.get("field_id")) == str(field_id):
+                    for j in range(i + 1, min(i + 4, len(answers))):
+                        if answers[j].get("title") == "Photo" or answers[j].get("field_type") == "photo":
+                            photo_val = answers[j].get("value")
+                            if isinstance(photo_val, list) and len(photo_val) > 0:
+                                s3_key = photo_val[0].get('s3_key')
+                                if s3_key: return get_zenput_signed_url(s3_key)
+            return ""
+
+        def get_notes_by_id(field_id):
+            for i, ans in enumerate(answers):
+                if str(ans.get("field_id")) == str(field_id):
+                    for j in range(i + 1, min(i + 4, len(answers))):
+                        if answers[j].get("title") == "Photo" or answers[j].get("field_type") == "photo":
+                            return answers[j].get("notes", "")
+            return ""
+
+        row_data = {
+            "Location": location_name, "Location External Key": external_key,
+            "Submitted By": meta.get("created_by", {}).get("display_name") if isinstance(meta.get("created_by"), dict) else meta.get("created_by", ""),
+            "Date Submitted": meta.get("date_submitted_local", ""),
+            "Is the bread color good?": get_val_with_quality_check(FIELDS["SHAWARMA_COLOR"]),
+            "Photo": get_photo_after_id(FIELDS["SHAWARMA_COLOR"]),
+            "Photo Notes": get_notes_by_id(FIELDS["SHAWARMA_COLOR"]),
+            "Quality of shawarma bread good?": get_val_with_quality_check(FIELDS["SHAWARMA_QUALITY"]),
+            "Photo2": get_photo_after_id(FIELDS["SHAWARMA_QUALITY"]),
+            "Photo Notes3": get_notes_by_id(FIELDS["SHAWARMA_QUALITY"]),
+            "Size of bread good? as our stander": get_val_with_quality_check(FIELDS["SHAWARMA_SIZE"]),
+            "Photo4": get_photo_after_id(FIELDS["SHAWARMA_SIZE"]),
+            "Photo Notes5": get_notes_by_id(FIELDS["SHAWARMA_SIZE"]),
+            "Is the bread color good?6": get_val_with_quality_check(FIELDS["TARABESH_COLOR"]),
+            "Photo7": get_photo_after_id(FIELDS["TARABESH_COLOR"]),
+            "Photo Notes8": get_notes_by_id(FIELDS["TARABESH_COLOR"]),
+            "Quality of tarabesh bread good?": get_val_with_quality_check(FIELDS["TARABESH_QUALITY"]),
+            "Photo9": get_photo_after_id(FIELDS["TARABESH_QUALITY"]),
+            "Photo Notes10": get_notes_by_id(FIELDS["TARABESH_QUALITY"]),
+            "Size of bread good? as our stander11": get_val_with_quality_check(FIELDS["TARABESH_SIZE"]),
+            "Photo12": get_photo_after_id(FIELDS["TARABESH_SIZE"]),
+            "Photo Notes13": get_notes_by_id(FIELDS["TARABESH_SIZE"]),
+            "Is the bread color good?14": get_val_with_quality_check(FIELDS["ARABI_COLOR"]),
+            "Photo15": get_photo_after_id(FIELDS["ARABI_COLOR"]),
+            "Photo Notes16": get_notes_by_id(FIELDS["ARABI_COLOR"]),
+            "Quality of Arabi bread good?": get_val_with_quality_check(FIELDS["ARABI_QUALITY"]),
+            "Photo17": get_photo_after_id(FIELDS["ARABI_QUALITY"]),
+            "Photo Notes18": get_notes_by_id(FIELDS["ARABI_QUALITY"]),
+            "Size of bread good?19": get_val_with_quality_check(FIELDS["ARABI_SIZE"]),
+            "Photo20": get_photo_after_id(FIELDS["ARABI_SIZE"]),
+            "Photo Notes21": get_notes_by_id(FIELDS["ARABI_SIZE"]),
+            "Project": "Quality Bread", "Distance from Location": str(round(float(meta.get("distance_to_account") or 0), 2)),
+            "Time to Complete": format_milliseconds_to_hms(meta.get("time_to_complete")),
+            "Timezone": meta.get("time_zone", ""),
+            "Location Map": f'=HYPERLINK("http://maps.google.com/?q={lat},{lon}", "View Map")' if lat and lon else "",
+            "Submission Legacy Id": s.get("legacy_submission_id", ""), "Submission Id": s.get("id", ""),
+            "Submission Link": f'=HYPERLINK("https://www.zenput.com/reports/#form_id/{legacy_sub_id}", "View Form")' if legacy_sub_id else "",
+            "PDF": f'=HYPERLINK("https://www.zenput.com/submission/{sub_id}/pdf/", "Download PDF")' if sub_id else "",
+            "Task Opened At": meta.get("date_created", ""), "Time Opened": meta.get("date_created", "")[11:19] if meta.get("date_created") else ""
+        }
+        rows.append(row_data)
+    return pd.DataFrame(rows)
+
+# --- الجزء الثالث: قالب الـ HTML كما هو في كودك ---
+html_template = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تحكم مراقبة الجودة المتقدمة</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f8fafc; --card-color: #ffffff; --border-color: #e5e7eb;
+            --text-primary: #1f2937; --text-secondary: #6b7280;
+            --color-orange: #f97316; --color-orange-light: #fff7ed;
+            --color-orange-dark: #c2410c; --color-red: #ef4444;
+        }
+        body { font-family: 'Tajawal', sans-serif; background-color: var(--bg-color); color: var(--text-primary); margin: 0; padding: 20px; }
+        #dashboard-to-export { padding: 10px; background-color: var(--bg-color); width: 1100px; margin: auto; }
+        .dashboard-container { display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px; }
+        .header { grid-column: 1 / -1; margin-bottom: 16px; }
+        .header h1 { margin: 0; font-size: 2.25rem; font-weight: 700; }
+        .card { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; }
+        .card.kpi { grid-column: span 3; text-align: center; }
+        .value { font-size: 2.5rem; font-weight: 700; margin: 0; }
+        .value.orange { color: var(--color-orange); }
+        .value.red { color: var(--color-red); }
+        .bar-item { display: flex; align-items: center; margin-bottom: 12px; }
+        .bar-label { width: 35%; font-size: 0.9rem; color: var(--text-secondary); }
+        .bar-wrapper { flex-grow: 1; background-color: #f3f4f6; border-radius: 6px; height: 24px; }
+        .bar { height: 100%; background: var(--color-orange); border-radius: 6px; color: #fff; padding-right: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border-bottom: 1px solid var(--border-color); text-align: right; }
+        thead { background-color: #f1f5f9; }
+        .issue-photo { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <div id="dashboard-to-export">
+        <div class="dashboard-container">
+            <header class="header">
+                <h1>لوحة تحكم مراقبة الجودة</h1>
+                <p>تحليل لـ {{total_reports}} تقرير جودة حديث</p>
+            </header>
+            <div class="card kpi"><h3>معدل الجودة العام</h3><p class="value">{{quality_rate}}%</p></div>
+            <div class="card kpi"><h3>إجمالي المشاكل</h3><p class="value red">{{total_issues}}</p></div>
+            <div class="card kpi"><h3>الفروع المتأثرة</h3><p class="value orange">{{branches_with_issues}}</p></div>
+            <div class="card kpi"><h3>إجمالي التقارير</h3><p class="value">{{total_reports}}</p></div>
+            <div class="card table-card" style="grid-column: span 12;">
+                <table>
+                    <thead><tr><th>الفرع</th><th>المنتج</th><th>فئة المشكلة</th><th>المشكلة</th><th>الصورة</th></tr></thead>
+                    <tbody>{{issues_table_rows}}</tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+# --- الجزء الرابع: دوال التقرير النهائي (PDF & Email) ---
+def get_image_as_base64(url):
+    if not isinstance(url, str) or not url.startswith('http'): 
+        match = re.search(r'HYPERLINK\("([^"]+)"', url)
+        if match: url = match.group(1)
+        else: return None
+    try:
+        response = requests.get(url, timeout=15)
+        if response.status_code == 200:
+            encoded_string = base64.b64encode(response.content).decode('utf-8')
+            return f"data:image/jpeg;base64,{encoded_string}"
+    except: pass
+    return None
+
+async def export_to_pdf(html_content, pdf_path):
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(args=["--no-sandbox"])
+        page = await browser.new_page()
+        await page.set_content(html_content)
+        await page.pdf(path=pdf_path, format="A4", print_background=True, landscape=True)
+        await browser.close()
+
+def send_final_email(pdf_path, stats):
+    msg = EmailMessage()
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    msg['Subject'] = f'📊 تقرير جودة الخبز اليومي - {today}'
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = ", ".join(RECIPIENTS_TO)
+    msg['Cc'] = ", ".join(RECIPIENTS_CC)
+    msg.set_content(f"تحية طيبة، مرفق تقرير جودة الخبز ليوم {today}.\nالجودة: {stats['rate']}%\nالمشاكل: {stats['issues']}")
+    with open(pdf_path, 'rb') as f:
+        msg.add_attachment(f.read(), maintype='application', subtype='pdf', filename=os.path.basename(pdf_path))
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+        smtp.login(SENDER_EMAIL, APP_PASSWORD)
+        smtp.send_message(msg)
+
+# --- الجزء الخامس: التنفيذ النهائي (Main) ---
+async def main():
+    try:
+        # 1. جلب ومعالجة البيانات
+        data_raw = fetch_submissions_dynamic(TEMPLATE_ID)
+        final_df = process_quality_bread_submissions_to_df(data_raw)
+        
+        if final_df.empty:
+            print("⚠️ No data found today.")
+            return
+
+        # 2. تحديث جوجل شيت
+        scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        creds = Credentials.from_service_account_info(json.loads(GOOGLE_JSON_STR), scopes=scopes)
+        gc = gspread.authorize(creds)
+        sheet = gc.open_by_key(GOOGLE_SHEET_ID).get_worksheet(0)
+        sheet.clear()
+        set_with_dataframe(sheet, final_df)
+
+        # 3. تحليل المشاكل لبناء التقرير المرئي
+        product_groups = ['خبز شاورما', 'خبز طرابيش', 'خبز عربي']
+        question_cols = [c for c in final_df.columns if '?' in str(c)]
+        all_checks, issues = [], []
+
+        for _, row in final_df.iterrows():
+            for i, q_col in enumerate(question_cols):
+                ans = str(row.get(q_col, '')).lower()
+                all_checks.append(ans == 'yes')
+                if ans != 'yes' and ans != '':
+                    q_idx = list(final_df.columns).index(q_col)
+                    photo_url = row.get(final_df.columns[q_idx + 1], '')
+                    b64 = get_image_as_base64(photo_url)
+                    issues.append({
+                        'branch': row['Location'], 'product': product_groups[(i//3)%3],
+                        'metric': 'الجودة', 'problem': 'غير مطابق', 'img': b64
+                    })
+
+        # 4. بناء صفوف الجدول وحساب الإحصائيات
+        rows_html = "".join([f"<tr><td>{x['branch']}</td><td>{x['product']}</td><td>{x['metric']}</td><td>{x['problem']}</td><td><img src='{x['img']}' class='issue-photo'></td></tr>" for x in issues if x['img']])
+        rate = (sum(all_checks)/len(all_checks)*100) if all_checks else 100
+        
+        final_content = html_template.replace('{{quality_rate}}', f"{rate:.1f}")\
+                                     .replace('{{total_issues}}', str(len(issues)))\
+                                     .replace('{{total_reports}}', str(len(final_df)))\
+                                     .replace('{{branches_with_issues}}', str(len(set(x['branch'] for x in issues))))\
+                                     .replace('{{issues_table_rows}}', rows_html)
+
+        # 5. تصدير PDF وإرسال إيميل
+        pdf_name = f"Report_{datetime.now(TZ).strftime('%Y-%m-%d')}.pdf"
+        await export_to_pdf(final_content, pdf_name)
+        send_final_email(pdf_name, {'rate': round(rate, 1), 'issues': len(issues)})
+        print("✅ التقرير جاهز وتم الإرسال بنجاح!")
+
+    except Exception as e:
+        print(f"❌ حدث خطأ: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
