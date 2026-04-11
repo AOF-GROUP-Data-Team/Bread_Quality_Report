@@ -386,7 +386,10 @@ def send_final_email(pdf_path, stats, issues_list):
     msg['To'] = ", ".join(RECIPIENTS_TO)
     msg['Cc'] = ", ".join(RECIPIENTS_CC)
 
-    # نص الإيميل الرسمي والمنسق بـ HTML بسيط جداً للحفاظ على الرسمية
+    # 1. تجهيز النص خارج الـ f-string لتجنب الـ SyntaxError
+    formatted_issues = issues_text.replace('\n', '<br>')
+
+    # 2. الآن نضع المتغير الجاهز داخل الـ HTML
     email_body = f"""
     <html>
     <body dir="rtl" style="font-family: Arial, sans-serif; line-height: 1.6; color: #000;">
@@ -398,7 +401,7 @@ def send_final_email(pdf_path, stats, issues_list):
         
         <p><b>وتتمثل ملاحظات اليوم فيما يلي:</b></p>
         <div style="margin-right: 20px;">
-            {issues_text.replace('\n', '<br>')}
+            {formatted_issues}
         </div>
         
         <p>نأمل من سيادتكم التكرم بمراجعة هذه الملاحظات، والتفضل باتخاذ ما ترونه مناسبًا من إجراءات لضمان تحسين الجودة والحد من تكرار هذه المشكلات.</p>
