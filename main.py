@@ -362,71 +362,68 @@ def send_final_email(pdf_path, stats, issues_list):
     msg = EmailMessage()
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     
-    # تحديد المنتجات المتأثرة
-    troubled_products = list(set(i['product'] for i in issues_list))
-    products_str = "، ".join(troubled_products) if troubled_products else "لا يوجد ملحوظات"
+    # تحضير ملخص المشاكل لكل منتج بشكل ديناميكي
+    # سيقوم الكود بتجميع المقاييس (لون، حجم، جودة) لكل منتج ظهرت فيه مشكلة
+    summary_data = {}
+    for i in issues_list:
+        p = i['product']
+        m = i['metric']
+        if p not in summary_data:
+            summary_data[p] = set()
+        summary_data[p].add(m)
     
-    # تحديد لون النسبة (أخضر لو الجودة عالية، أحمر لو قليلة)
-    rate_color = "#16a34a" if stats['rate'] >= 95 else "#dc2626"
+    # بناء نص المشاكل (مثال: خبز الشاورما: مشاكل في اللون والحجم)
+    issues_text = ""
+    for product, metrics in summary_data.items():
+        metrics_str = " و ".join(list(metrics))
+        issues_text += f"- {product}: مشاكل في {metrics_str}\n"
+    
+    if not issues_text:
+        issues_text = "- لا توجد ملاحظات جوهرية لهذا اليوم."
 
-    msg['Subject'] = f'📊 تقرير جودة الخبز اليومي - {today}'
+    msg['Subject'] = f'📊 تقرير جودة الخبز بالفروع - {today}'
     msg['From'] = SENDER_EMAIL
     msg['To'] = ", ".join(RECIPIENTS_TO)
     msg['Cc'] = ", ".join(RECIPIENTS_CC)
 
-    # تصميم محتوى الإيميل بـ HTML
-    html_content = f"""
+    # نص الإيميل الرسمي والمنسق بـ HTML بسيط جداً للحفاظ على الرسمية
+    email_body = f"""
     <html>
-    <body dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-            <div style="background-color: #f97316; color: white; padding: 20px; text-align: center;">
-                <h2 style="margin: 0;">تقرير مراقبة الجودة اليومي</h2>
-                <p style="margin: 5px 0 0;">تاريخ التقرير: {today}</p>
-            </div>
-            
-            <div style="padding: 20px;">
-                <p>السادة إدارة المشتريات المحترمين،</p>
-                <p>تحية طيبة وبعد،،</p>
-                <p>مرفق لكم التقرير التفصيلي لجودة أنواع الخبز في الفروع. إليكم ملخص النتائج السريعة:</p>
-                
-                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                    <tr>
-                        <td style="padding: 10px; border: 1px solid #eee; background-color: #f8fafc;"><b>معدل الجودة العام:</b></td>
-                        <td style="padding: 10px; border: 1px solid #eee; color: {rate_color}; font-weight: bold; font-size: 1.1em;">{stats['rate']}%</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 10px; border: 1px solid #eee; background-color: #f8fafc;"><b>إجمالي الملحوظات:</b></td>
-                        <td style="padding: 10px; border: 1px solid #eee; color: #dc2626; font-weight: bold;">{stats['issues']} ملحوظة</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 10px; border: 1px solid #eee; background-color: #f8fafc;"><b>المنتجات المتأثرة:</b></td>
-                        <td style="padding: 10px; border: 1px solid #eee;">{products_str}</td>
-                    </tr>
-                </table>
-
-                <div style="background-color: #fff7ed; border-right: 4px solid #f97316; padding: 15px; margin: 20px 0;">
-                    <p style="margin: 0;"><b>توصية النظام:</b> نرجو التحقق واتخاذ اللازم بشكل عاجل لضمان ثبات جودة المنتجات وتفادي تكرار الملحوظات مستقبلاً.</p>
-                </div>
-
-                <p>نؤكد على ضرورة الالتزام برفع تقارير الجودة في مواعيدها لضمان استقرار مستوى المنتجات وسرعة المعالجة.</p>
-                
-                <p style="font-size: 0.9em; color: #666; border-top: 1px solid #eee; padding-top: 20px; margin-top: 30px;">
-                    هذا البريد تم إنشاؤه آلياً بواسطة نظام أتمتة البيانات.<br>
-                    <b>Bread Quality Automation System</b>
-                </p>
-            </div>
+    <body dir="rtl" style="font-family: Arial, sans-serif; line-height: 1.6; color: #000;">
+        <p>السادة/ إدارة المشتريات،</p>
+        
+        <p>مرفق لسيادتكم تقرير جودة أنواع الخبز بالفروع ليوم {today}.</p>
+        
+        <p>نود الإشارة إلى ملاحظة تكرار بعض المشكلات المتعلقة بجودة أنواع الخبز خلال الفترة الأخيرة، وهو ما قد يؤثر على مستوى الخدمة المقدمة بالفروع.</p>
+        
+        <p><b>وتتمثل ملاحظات اليوم فيما يلي:</b></p>
+        <div style="margin-right: 20px;">
+            {issues_text.replace('\n', '<br>')}
         </div>
+        
+        <p>نأمل من سيادتكم التكرم بمراجعة هذه الملاحظات، والتفضل باتخاذ ما ترونه مناسبًا من إجراءات لضمان تحسين الجودة والحد من تكرار هذه المشكلات.</p>
+        
+        <p>وتفضلوا بقبول فائق الاحترام والتقدير،،</p>
+        
+        <p style="margin-top: 30px; font-size: 0.9em; color: #555;">
+            مرسل آلياً | نظام مراقبة الجودة
+        </p>
     </body>
     </html>
     """
 
-    msg.add_alternative(html_content, subtype='html')
+    msg.add_alternative(email_body, subtype='html')
 
-    # إرفاق الـ PDF
+    # إرفاق ملف الـ PDF
     with open(pdf_path, 'rb') as f:
-        msg.add_attachment(f.read(), maintype='application', subtype='pdf', filename=os.path.basename(pdf_path))
+        msg.add_attachment(
+            f.read(), 
+            maintype='application', 
+            subtype='pdf', 
+            filename=os.path.basename(pdf_path)
+        )
 
-    # الإرسال
+    # تنفيذ عملية الإرسال
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
         smtp.login(SENDER_EMAIL, APP_PASSWORD)
         smtp.send_message(msg)
