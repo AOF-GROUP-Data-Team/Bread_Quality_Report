@@ -362,48 +362,71 @@ def send_final_email(pdf_path, stats, issues_list):
     msg = EmailMessage()
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     
-    # تحديد المنتجات التي بها مشاكل لإضافتها في نص الرسالة
+    # تحديد المنتجات المتأثرة
     troubled_products = list(set(i['product'] for i in issues_list))
-    products_str = "، ".join(troubled_products) if troubled_products else "لا توجد"
+    products_str = "، ".join(troubled_products) if troubled_products else "لا يوجد ملحوظات"
+    
+    # تحديد لون النسبة (أخضر لو الجودة عالية، أحمر لو قليلة)
+    rate_color = "#16a34a" if stats['rate'] >= 95 else "#dc2626"
 
     msg['Subject'] = f'📊 تقرير جودة الخبز اليومي - {today}'
     msg['From'] = SENDER_EMAIL
     msg['To'] = ", ".join(RECIPIENTS_TO)
     msg['Cc'] = ", ".join(RECIPIENTS_CC)
 
-    # صياغة الرسالة (Email Body)
-    email_content = f"""السادة إدارة المشتريات المحترمين،
+    # تصميم محتوى الإيميل بـ HTML
+    html_content = f"""
+    <html>
+    <body dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: #f97316; color: white; padding: 20px; text-align: center;">
+                <h2 style="margin: 0;">تقرير مراقبة الجودة اليومي</h2>
+                <p style="margin: 5px 0 0;">تاريخ التقرير: {today}</p>
+            </div>
+            
+            <div style="padding: 20px;">
+                <p>السادة إدارة المشتريات المحترمين،</p>
+                <p>تحية طيبة وبعد،،</p>
+                <p>مرفق لكم التقرير التفصيلي لجودة أنواع الخبز في الفروع. إليكم ملخص النتائج السريعة:</p>
+                
+                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #eee; background-color: #f8fafc;"><b>معدل الجودة العام:</b></td>
+                        <td style="padding: 10px; border: 1px solid #eee; color: {rate_color}; font-weight: bold; font-size: 1.1em;">{stats['rate']}%</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #eee; background-color: #f8fafc;"><b>إجمالي الملحوظات:</b></td>
+                        <td style="padding: 10px; border: 1px solid #eee; color: #dc2626; font-weight: bold;">{stats['issues']} ملحوظة</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #eee; background-color: #f8fafc;"><b>المنتجات المتأثرة:</b></td>
+                        <td style="padding: 10px; border: 1px solid #eee;">{products_str}</td>
+                    </tr>
+                </table>
 
-تحية طيبة،،
+                <div style="background-color: #fff7ed; border-right: 4px solid #f97316; padding: 15px; margin: 20px 0;">
+                    <p style="margin: 0;"><b>توصية النظام:</b> نرجو التحقق واتخاذ اللازم بشكل عاجل لضمان ثبات جودة المنتجات وتفادي تكرار الملحوظات مستقبلاً.</p>
+                </div>
 
-مرفق لكم التقرير التفصيلي لجودة أنواع الخبز في الفروع ليوم {today}.
+                <p>نؤكد على ضرورة الالتزام برفع تقارير الجودة في مواعيدها لضمان استقرار مستوى المنتجات وسرعة المعالجة.</p>
+                
+                <p style="font-size: 0.9em; color: #666; border-top: 1px solid #eee; padding-top: 20px; margin-top: 30px;">
+                    هذا البريد تم إنشاؤه آلياً بواسطة نظام أتمتة البيانات.<br>
+                    <b>Bread Quality Automation System</b>
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
 
-بناءً على التقارير المرفوعة، نود إحاطتكم بالنتائج التالية:
-- معدل الجودة العام: {stats['rate']}%
-- إجمالي عدد الملحوظات: {stats['issues']} ملحوظة.
-- المنتجات المتأثرة: {products_str}
+    msg.add_alternative(html_content, subtype='html')
 
-نرجو منكم التحقق واتخاذ اللازم بشكل عاجل مع الموردين لضمان ثبات جودة المنتجات وتفادي تكرار هذه الملحوظات مستقبلاً.
-
-كما نؤكد على جميع الفروع ضرورة الالتزام برفع تقارير الجودة في مواعيدها المحددة لضمان سرعة المعالجة واستقرار مستوى المنتجات.
-
-شاكرين لكم تعاونكم.
-
-مرسل آلياً | نظام مراقبة الجودة
-"""
-    
-    msg.set_content(email_content)
-
-    # إرفاق ملف الـ PDF
+    # إرفاق الـ PDF
     with open(pdf_path, 'rb') as f:
-        msg.add_attachment(
-            f.read(), 
-            maintype='application', 
-            subtype='pdf', 
-            filename=os.path.basename(pdf_path)
-        )
+        msg.add_attachment(f.read(), maintype='application', subtype='pdf', filename=os.path.basename(pdf_path))
 
-    # عملية الإرسال
+    # الإرسال
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
         smtp.login(SENDER_EMAIL, APP_PASSWORD)
         smtp.send_message(msg)
@@ -484,9 +507,7 @@ async def main():
         current_date = datetime.now(TZ).strftime("%Y-%m-%d")
         pdf_name = f'Bread_Quality_Report_{current_date}.pdf'
         await export_to_pdf('report.html', pdf_name)
-        
-        # إرسال الإيميل
-        # send_final_email(pdf_name, {'rate': round(quality_rate, 1), 'issues': len(issues)})
+        # Send email
         send_final_email(pdf_name, {'rate': round(quality_rate, 1), 'issues': len(issues)}, issues)
         print("✅ تم استخراج التقرير بنجاح وتحديث الشيت وإرسال الإيميل!")
 
