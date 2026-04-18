@@ -29,7 +29,7 @@ GOOGLE_JSON_STR = os.environ.get('GOOGLE_CREDENTIALS')
 
 # إعدادات الإيميل
 SENDER_EMAIL    = "mohamed.hegazy010091@gmail.com"
-RECIPIENTS_TO   = ["Mohamed.hegazy8555@gmail.com","o.salahaddin@aofgroup.com"]
+RECIPIENTS_TO   = ["Mohamed.hegazy8555@gmail.com"]
 RECIPIENTS_CC   = ["m.hejazi@aofgroup.com"]
 
 # إعدادات المشروع الأساسية
