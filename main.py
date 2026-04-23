@@ -353,8 +353,7 @@ html_template = """
         body { font-family: 'Tajawal', sans-serif; background-color: var(--bg-color); color: var(--text-primary); margin: 0; padding: 0; }
         
         /* FIX 1: Removed 1100px width. Now it perfectly fits A4 Landscape width */
-        #dashboard-to-export { padding: 15px; background-color: var(--bg-color); width: 100%; box-sizing: border-box; }
-        
+        #dashboard-to-export { padding: 15px; background-color: var(--bg-color); width: 1100px; margin: auto; box-sizing: border-box; }        
         .dashboard-container { display: grid; grid-template-columns: repeat(12, 1fr); gap: 8px; }
         .header { grid-column: 1 / -1; margin-bottom: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
         .header h1 { margin: 0; font-size: 2rem; font-weight: 700; }
@@ -698,9 +697,13 @@ async def main():
             abs_path = f"file://{os.path.abspath('report.html')}"
             await page.goto(abs_path, wait_until="networkidle", timeout=90000)
             await page.evaluate("document.fonts.ready")
+            # THE MAGIC HEIGHT TRICK
+            h = await page.evaluate('document.body.scrollHeight')
             await page.pdf(
-                path=pdf_name, format="A4", print_background=True, 
-                landscape=True, margin={"top":"15mm","bottom":"15mm","left":"10mm","right":"10mm"}
+                path=pdf_name, 
+                width='1100px',          # Matches the CSS width exactly
+                height=f'{h + 100}px',   # Adds 100px buffer at the bottom
+                print_background=True
             )
             await browser.close()
 
