@@ -344,51 +344,67 @@ html_template = """
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        :root {
+       :root {
             --bg-color: #f8fafc; --card-color: #ffffff; --border-color: #e5e7eb;
             --text-primary: #1f2937; --text-secondary: #6b7280;
             --color-orange: #f97316; --color-orange-light: #fff7ed;
             --color-orange-dark: #c2410c; --color-red: #ef4444;
         }
-        body { font-family: 'Tajawal', sans-serif; background-color: var(--bg-color); color: var(--text-primary); margin: 0; padding: 20px; }
-        @media print {
-            body { background-color: white; }
-            .card { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 20px; box-shadow: none !important; border: 1px solid #eee !important; }
-            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
-            thead { display: table-header-group; }
-            #dashboard-to-export { width: 100% !important; padding: 0 !important; }
-        }
-        #dashboard-to-export { padding: 10px; background-color: var(--bg-color); width: 1100px; margin: auto; }
-        .dashboard-container { display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px; }
-        .header { grid-column: 1 / -1; margin-bottom: 16px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
-        .header h1 { margin: 0; font-size: 2.25rem; font-weight: 700; }
-        .header p { margin: 4px 0 0; font-size: 1.1rem; color: var(--text-secondary); }
-        .card { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.04); grid-column: span 12; }
+        body { font-family: 'Tajawal', sans-serif; background-color: var(--bg-color); color: var(--text-primary); margin: 0; padding: 0; }
+        
+        /* FIX 1: Removed 1100px width. Now it perfectly fits A4 Landscape width */
+        #dashboard-to-export { padding: 15px; background-color: var(--bg-color); width: 100%; box-sizing: border-box; }
+        
+        .dashboard-container { display: grid; grid-template-columns: repeat(12, 1fr); gap: 15px; }
+        .header { grid-column: 1 / -1; margin-bottom: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+        .header h1 { margin: 0; font-size: 2rem; font-weight: 700; }
+        .header p { margin: 4px 0 0; font-size: 1rem; color: var(--text-secondary); }
+        
+        .card { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.04); grid-column: span 12; box-sizing: border-box; }
         @media (min-width: 640px) { .card.kpi { grid-column: span 6; } }
         @media (min-width: 1024px) { .card.kpi { grid-column: span 3; } .card.chart { grid-column: span 6; } }
-        .card-title { font-size: 1.1rem; font-weight: 600; color: var(--text-secondary); margin: 0 0 16px 0; }
+        
+        .card-title { font-size: 1rem; font-weight: 600; color: var(--text-secondary); margin: 0 0 12px 0; }
         .card.kpi { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
-        .kpi .value { font-size: 2.5rem; font-weight: 700; margin: 0; }
-        .kpi .value .icon { font-size: 1.5rem; vertical-align: middle; margin-right: 8px; }
+        .kpi .value { font-size: 2.2rem; font-weight: 700; margin: 0; }
+        
         .value.orange { color: var(--color-orange); }
         .value.red { color: var(--color-red); }
-        .bar-item { display: flex; align-items: center; margin-bottom: 12px; font-size: 0.9rem; }
+        
+        .bar-item { display: flex; align-items: center; margin-bottom: 10px; font-size: 0.85rem; }
         .bar-label { width: 35%; white-space: nowrap; color: var(--text-secondary); padding-left: 10px; }
-        .bar-wrapper { flex-grow: 1; background-color: #f3f4f6; border-radius: 6px; height: 24px; }
-        .bar { height: 100%; background: linear-gradient(90deg, var(--color-orange), #fdba74); border-radius: 6px; display: flex; align-items: center; justify-content: flex-start; color: #fff; font-weight: 700; font-size: 0.8rem; padding-right: 8px; box-sizing: border-box; transition: width 0.5s ease-out; }
+        .bar-wrapper { flex-grow: 1; background-color: #f3f4f6; border-radius: 6px; height: 22px; }
+        .bar { height: 100%; background: linear-gradient(90deg, var(--color-orange), #fdba74); border-radius: 6px; display: flex; align-items: center; justify-content: flex-start; color: #fff; font-weight: 700; font-size: 0.8rem; padding-right: 8px; box-sizing: border-box; }
+        
         .table-wrapper { width: 100%; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 8px; }
         table { width: 100%; border-collapse: collapse; text-align: right; }
-        th, td { padding: 12px 16px; font-size: 0.9rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+        th, td { padding: 10px 14px; font-size: 0.85rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
         thead { background-color: var(--bg-color); }
         th { font-weight: 700; color: var(--text-secondary); }
         tbody tr:last-child td { border-bottom: none; }
+        
         td .status-badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-weight: 500; font-size: 0.8rem; }
         td .status-badge.quality { background-color: #fee2e2; color: #b91c1c; }
         td .status-badge.size { background-color: #ffedd5; color: #9a3412; }
         td .status-badge.color { background-color: #dbeafe; color: #1e40af; }
-        td .status-badge.availability { background-color: #e5e7eb; color: #374151; }
+        
         .photo-container { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-        .issue-photo { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 2px solid var(--border-color); }
+        .issue-photo { width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 2px solid var(--border-color); }
+
+        /* FIX 2: Strict Print Rules to stop ugly page breaks */
+        @media print {
+            body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            .card { 
+                page-break-inside: avoid !important; 
+                break-inside: avoid !important; 
+                box-shadow: none !important; 
+                border: 1px solid #ddd !important; 
+                margin-bottom: 15px !important;
+            }
+            .card.kpi, .card.chart { page-break-inside: avoid !important; break-inside: avoid !important; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+            thead { display: table-header-group; }
+        }
     </style>
 </head>
 <body>
