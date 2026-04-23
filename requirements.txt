@@ -5,5 +5,8 @@ numpy
 gspread
 gspread-dataframe
 google-auth
+google-auth-oauthlib
+google-auth_httplib2
+Pillow
 playwright
-nest-asyncio
+nest_asyncio
