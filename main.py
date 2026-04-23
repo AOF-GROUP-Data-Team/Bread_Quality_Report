@@ -355,7 +355,7 @@ html_template = """
         /* FIX 1: Removed 1100px width. Now it perfectly fits A4 Landscape width */
         #dashboard-to-export { padding: 15px; background-color: var(--bg-color); width: 100%; box-sizing: border-box; }
         
-        .dashboard-container { display: grid; grid-template-columns: repeat(12, 1fr); gap: 15px; }
+        .dashboard-container { display: grid; grid-template-columns: repeat(12, 1fr); gap: 8px; }
         .header { grid-column: 1 / -1; margin-bottom: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
         .header h1 { margin: 0; font-size: 2rem; font-weight: 700; }
         .header p { margin: 4px 0 0; font-size: 1rem; color: var(--text-secondary); }
@@ -364,9 +364,9 @@ html_template = """
         @media (min-width: 640px) { .card.kpi { grid-column: span 6; } }
         @media (min-width: 1024px) { .card.kpi { grid-column: span 3; } .card.chart { grid-column: span 6; } }
         
-        .card-title { font-size: 1rem; font-weight: 600; color: var(--text-secondary); margin: 0 0 12px 0; }
-        .card.kpi { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
-        .kpi .value { font-size: 2.2rem; font-weight: 700; margin: 0; }
+        .card-title { font-size: 1rem; font-weight: 600; color: var(--text-secondary); margin: 0 0 4px 0; white-space: nowrap; }
+        .card.kpi { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 10px 15px !important; }
+        .kpi .value { font-size: 2rem; font-weight: 700; margin: 0; }
         
         .value.orange { color: var(--color-orange); }
         .value.red { color: var(--color-red); }
