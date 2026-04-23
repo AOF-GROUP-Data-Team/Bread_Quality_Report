@@ -547,6 +547,7 @@ def send_final_email(pdf_path, stats, issues_list):
     msg = EmailMessage()
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     
+    # 1. تجميع المشاكل لمعرفة إن كان يوجد مشاكل فعلاً أم لا
     summary_data = {}
     for i in issues_list:
         p = i['product']
@@ -554,37 +555,56 @@ def send_final_email(pdf_path, stats, issues_list):
         if p not in summary_data: summary_data[p] = set()
         summary_data[p].add(m)
     
+    has_issues = bool(summary_data) # متغير يتحقق هل في مشاكل ولا لا
+
+    # 2. تجهيز نص المشاكل
     issues_text = ""
-    for product, metrics in summary_data.items():
-        metrics_str = " و ".join(list(metrics))
-        issues_text += f"- {product}: مشاكل في {metrics_str}\n"
-    
-    if not issues_text: issues_text = "- لا توجد ملاحظات جوهرية لهذا اليوم."
+    if has_issues:
+        for product, metrics in summary_data.items():
+            metrics_str = " و ".join(list(metrics))
+            issues_text += f"- {product}: مشاكل في {metrics_str}<br>"
+    else:
+        issues_text = "- لا توجد ملاحظات جوهرية لهذا اليوم."
 
     msg['Subject'] = f'📊 تقرير جودة الخبز بالفروع - {today}'
     msg['From'] = SENDER_EMAIL
     msg['To'] = ", ".join(RECIPIENTS_TO)
     msg['Cc'] = ", ".join(RECIPIENTS_CC)
 
-    formatted_issues = issues_text.replace('\n', '<br>')
+    # 3. الفقرة الشرطية (تظهر فقط إذا كان has_issues = True)
+    action_paragraph = ""
+    if has_issues:
+        action_paragraph = "<p>نأمل من سيادتكم التكرم بمراجعة هذه الملاحظات، والتفضل باتخاذ ما ترونه مناسبًا من إجراءات لضمان تحسين الجودة والحد من تكرار هذه المشكلات.</p>"
+
+    # 4. بناء الـ HTML مع تطبيق الخط العريض (Bold) وحجم موحد (14px) على الجسم كامل
     email_body = f"""
     <html>
-    <body dir="rtl" style="font-family: Arial, sans-serif; line-height: 1.6; color: #000;">
+    <body dir="rtl" style="font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; line-height: 1.8; color: #000;">
+        
         <p>السادة/ إدارة المشتريات،</p>
+        
         <p>مرفق لسيادتكم تقرير جودة أنواع الخبز بالفروع ليوم {today}.</p>
+        
         <p>نود الإشارة إلى ملاحظة تكرار بعض المشكلات المتعلقة بجودة أنواع الخبز خلال الفترة الأخيرة، وهو ما قد يؤثر على مستوى الخدمة المقدمة بالفروع.</p>
-        <p><b>وتتمثل ملاحظات اليوم فيما يلي:</b></p>
-        <div style="margin-right: 20px;">{formatted_issues}</div>
-        <p>نأمل من سيادتكم التكرم بمراجعة هذه الملاحظات، والتفضل باتخاذ ما ترونه مناسبًا من إجراءات لضمان تحسين الجودة والحد من تكرار هذه المشكلات.</p>
+        
+        <p>وتتمثل ملاحظات اليوم فيما يلي:</p>
+        <div style="margin-right: 20px;">{issues_text}</div>
+        
+        {action_paragraph}
+        
         <p>وتفضلوا بقبول فائق الاحترام والتقدير،</p>
+        
     </body>
     </html>
     """
+
     msg.add_alternative(email_body, subtype='html')
 
+    # 5. إرفاق ملف الـ PDF
     with open(pdf_path, 'rb') as f:
         msg.add_attachment(f.read(), maintype='application', subtype='pdf', filename=os.path.basename(pdf_path))
 
+    # 6. تنفيذ عملية الإرسال
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
         smtp.login(SENDER_EMAIL, APP_PASSWORD)
         smtp.send_message(msg)
