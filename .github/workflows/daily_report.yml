@@ -3,7 +3,7 @@ name: Daily Bread Quality Report
 on:
   schedule:
     - cron: '0 14 * * 0,1,2,3,4,6'
-  workflow_dispatch: # يتيح لك تشغيل الكود يدوياً للتجربة
+  workflow_dispatch: 
 
 jobs:
   run-report:
