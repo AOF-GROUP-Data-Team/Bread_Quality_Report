@@ -21,20 +21,20 @@ from urllib.parse import quote
 from playwright.async_api import async_playwright
 from PIL import Image
 
-# تفعيل nest_asyncio لبيئة GitHub Actions
+# Set nest_asyncio for GitHub Actions
 nest_asyncio.apply()
 
-# --- إعدادات الحماية (GitHub Secrets) ---
+# --- GitHub Secrets ---
 API_KEY         = os.environ.get('ZENPUT_API_KEY')
 APP_PASSWORD    = os.environ.get('GMAIL_APP_PASSWORD')
 GOOGLE_JSON_STR = os.environ.get('GOOGLE_CREDENTIALS') 
 
-# إعدادات الإيميل
+# SENDER_EMAIL 
 SENDER_EMAIL    = "mohamed.hegazy010091@gmail.com"
 RECIPIENTS_TO   = ["Mohamed.hegazy8555@gmail.com","o.salahaddin@aofgroup.com"]
 RECIPIENTS_CC   = ["m.hejazi@aofgroup.com","a.alsalem@aofgroup.com"]
 
-# إعدادات المشروع الأساسية
+# Project Settings
 TEMPLATE_ID     = 659312
 TZ              = pytz.timezone("Asia/Baghdad")
 GOOGLE_SHEET_ID = "1bestuz83Y-6o470OHF-J8dx6CxE4J9goJcj6jnOx5Ds"
@@ -52,7 +52,7 @@ FID_SHAWARMA_QUALITY_PHOTO = 11183494
 FID_SHAWARMA_SIZE          = 11183495
 FID_SHAWARMA_SIZE_PHOTO    = 11183496
 
-# --- Arabi Bread (comes BEFORE Tarabesh in API response) ---
+# --- Arabi Bread ---
 FID_ARABI_COLOR            = 11183499
 FID_ARABI_COLOR_PHOTO      = 11183500
 FID_ARABI_QUALITY          = 11183501
@@ -60,7 +60,7 @@ FID_ARABI_QUALITY_PHOTO    = 11183502
 FID_ARABI_SIZE             = 11183503
 FID_ARABI_SIZE_PHOTO       = 11183504
 
-# --- Tarabesh Bread (comes LAST in API response) ---
+# --- Tarabesh Bread  ---
 FID_TARABESH_COLOR         = 11707959
 FID_TARABESH_COLOR_PHOTO   = 11707960
 FID_TARABESH_QUALITY       = 11707961
@@ -288,7 +288,7 @@ def process_quality_bread_submissions_to_df(submissions):
                 "Photo20":                               get_photo_link(ans_by_id, FID_ARABI_SIZE_PHOTO),
                 "Photo Notes21":                         get_photo_notes(ans_by_id, FID_ARABI_SIZE_PHOTO),
 
-                # --- Meta ---
+                # --- Meta Data ---
                 "Project": (
                     meta.get("task", {}).get("title")
                     if isinstance(meta.get("task"), dict)
@@ -546,7 +546,7 @@ def send_final_email(pdf_path, stats, issues_list):
     msg = EmailMessage()
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     
-    # 1. تجميع المشاكل لمعرفة إن كان يوجد مشاكل فعلاً أم لا
+    # 1. Compile a list of issues to determine whether there are actually any problems 
     summary_data = {}
     for i in issues_list:
         p = i['product']
@@ -554,9 +554,9 @@ def send_final_email(pdf_path, stats, issues_list):
         if p not in summary_data: summary_data[p] = set()
         summary_data[p].add(m)
     
-    has_issues = bool(summary_data) # متغير يتحقق هل في مشاكل ولا لا
+    has_issues = bool(summary_data) # Check if there are any problems or not
 
-    # 2. تجهيز نص المشاكل
+    # 2. Formatting the problem text
     issues_text = ""
     if has_issues:
         for product, metrics in summary_data.items():
@@ -570,12 +570,12 @@ def send_final_email(pdf_path, stats, issues_list):
     msg['To'] = ", ".join(RECIPIENTS_TO)
     msg['Cc'] = ", ".join(RECIPIENTS_CC)
 
-    # 3. الفقرة الشرطية (تظهر فقط إذا كان has_issues = True)
+    # 3. Conditional block (appears only if has_issues = True)
     action_paragraph = ""
     if has_issues:
         action_paragraph = "<p>نأمل من سيادتكم التكرم بمراجعة هذه الملاحظات، والتفضل باتخاذ ما ترونه مناسبًا من إجراءات لضمان تحسين الجودة والحد من تكرار هذه المشكلات.</p>"
 
-    # 4. بناء الـ HTML مع تطبيق الخط العريض (Bold) وحجم موحد (14px) على الجسم كامل
+    # 4. Create the HTML with bold text and a uniform font size (14px) applied to the entire body
     email_body = f"""
     <html>
     <body dir="rtl" style="font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; line-height: 1.8; color: #000;">
@@ -599,19 +599,19 @@ def send_final_email(pdf_path, stats, issues_list):
 
     msg.add_alternative(email_body, subtype='html')
 
-    # 5. إرفاق ملف الـ PDF
+    # 5. Attach the PDF file
     with open(pdf_path, 'rb') as f:
         msg.add_attachment(f.read(), maintype='application', subtype='pdf', filename=os.path.basename(pdf_path))
 
-    # 6. تنفيذ عملية الإرسال
+    # 6. Execute the transmission process
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
         smtp.login(SENDER_EMAIL, APP_PASSWORD)
         smtp.send_message(msg)
 
-# ---------------- MAIN EXECUTION BLOCK ----------------
+# ---------------- Main Run ----------------
 async def main():
     try:
-        # 1. جلب ومعالجة البيانات
+        # 1. Data Collection and Processing
         data     = fetch_submissions_dynamic(TEMPLATE_ID)
         final_df = process_quality_bread_submissions_to_df(data)
         
@@ -619,7 +619,7 @@ async def main():
             print("⚠️ No data found for the specified date.")
             return
 
-        # 2. تحديث شيت جوجل باستخدام المصادقة الآلية (Service Account)
+        # 2. Update Google Sheet using automated authentication (Service Account)
         scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         creds = Credentials.from_service_account_info(json.loads(GOOGLE_JSON_STR), scopes=scopes)
         gc = gspread.authorize(creds)
@@ -628,13 +628,13 @@ async def main():
         set_with_dataframe(sheet, final_df, row=1, col=1, include_index=False, include_column_header=True)
         print("🎉 Google Sheet updated successfully!")
 
-        # 3. تحليل المشاكل وتجهيز البيانات
-        print("⏳ جاري تحليل المشاكل وتجهيز التقرير الـ PDF...")
+        # 3. Problem Analysis and Data Preparation
+        print("⏳ The issues are currently being analyzed, and the PDF report is being prepared....")
         all_checks, issues = process_spreadsheet_v2(final_df)
         total_reports = len(final_df)
         total_checks_count = len(all_checks)
 
-        # 4. تحميل الصور وتحويلها
+        # 4. Upload and convert images
         print("جاري تحميل الصور وتضمينها في التقرير...")
         table_rows_html = ""
         final_issues = []
@@ -666,7 +666,7 @@ async def main():
         if not final_issues:
             table_rows_html = '<tr><td colspan="5" style="text-align:center; padding: 20px;">لم يتم العثور على مشاكل! عمل رائع.</td></tr>'
 
-        # 5. حساب النسب
+        # 5. Calculating Proportions
         total_issues_count    = len(final_issues)
         branches_with_issues  = len(set(issue['branch'] for issue in final_issues))
         quality_rate          = ((total_checks_count - total_issues_count) / total_checks_count * 100) if total_checks_count > 0 else 100
@@ -675,7 +675,7 @@ async def main():
 
         print(f"✅ تم العثور على {total_issues_count} مشكلة فعلية في التقرير.")
 
-        # 6. حقن البيانات في القالب
+        # 6. Data injection into the template
         final_html = html_template.replace('{{total_reports}}', str(total_reports))\
                                   .replace('{{quality_rate}}', f"{quality_rate:.1f}")\
                                   .replace('{{total_issues}}', str(total_issues_count))\
@@ -684,7 +684,7 @@ async def main():
                                   .replace('{{product_issues_bars}}', create_bar_chart_html(product_issues_counter))\
                                   .replace('{{issues_table_rows}}', table_rows_html)
 
-        # 7. حفظ HTML وتحويله لـ PDF عبر Playwright
+        # 7. Save HTML and Convert It to PDF Using Playwright
         with open('report.html', 'w', encoding='utf-8') as f: f.write(final_html)
         print("📡 جاري تحويل HTML إلى PDF...")
         current_date = datetime.now(TZ).strftime("%Y-%m-%d")
@@ -707,12 +707,12 @@ async def main():
             )
             await browser.close()
 
-        # 8. إرسال الإيميل
+        # 8. Send Email
         send_final_email(pdf_name, {'rate': round(quality_rate, 1), 'issues': len(issues)}, final_issues)
-        print("✅ تم استخراج التقرير بنجاح وتحديث الشيت وإرسال الإيميل!")
+        print("✅ The report was successfully generated, the spreadsheet was updated, and the email was sent!")
 
     except Exception as e:
-        print(f"❌ حدث خطأ أثناء التشغيل: {e}")
+        print(f"❌ An error occurred during operation: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
