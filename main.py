@@ -566,7 +566,7 @@ def send_final_email(pdf_path, stats, issues_list):
         issues_text = "- لا توجد ملاحظات جوهرية لهذا اليوم."
 
     msg['Subject'] = f'📊 تقرير جودة الخبز بالفروع - {today}'
-    msg['From'] = SENDER_EMAIL
+    msg['From'] = f"Business Intelligence <{SENDER_EMAIL}>"
     msg['To'] = ", ".join(RECIPIENTS_TO)
     msg['Cc'] = ", ".join(RECIPIENTS_CC)
 
