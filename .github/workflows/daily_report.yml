@@ -2,7 +2,7 @@ name: Daily Bread Quality Report
 
 on:
   schedule:
-    - cron: '0 14 * * 0,1,2,3,4,6'
+    - cron: '0 14 * * *'
   workflow_dispatch: 
 
 jobs:
