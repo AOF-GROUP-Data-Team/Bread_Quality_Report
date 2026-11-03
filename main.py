@@ -33,7 +33,7 @@ GOOGLE_JSON_STR = os.environ.get('GOOGLE_CREDENTIALS')
 SENDER_EMAIL    = "aof.group.auto@gmail.com"
 RECIPIENTS_TO   = ["a.alminshawi@aofgroup.com","a.abduldim@aofgroup.com","a.omara@aofgroup.com",
                    "m.alghazali@aofgroup.com","m.alsaghir@aofgroup.com","n.joshe@aofgroup.com",
-                   "m.alhuaydar@aofgroup.com","m.alfadhil@aofgroup.com","i.mostafa@aofgroup.com",
+                   "m.alhuaydar@aofgroup.com","i.mostafa@aofgroup.com",
                    "a.alarabi@aofgroup.com","s.poudel@aofgroup.com","a.mahmud@aofgroup.com",
                    "a.suliman@aofgroup.com","m.emad@aofgroup.com","a.banafe@aofgroup.com","s.mansuri@aofgroup.com",
                    "o.aljawhari@aofgroup.com","n.alzahrani@aofgroup.com","s.alharbi@aofgroup.com"]
