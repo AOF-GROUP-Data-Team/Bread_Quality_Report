@@ -1,3 +1,24 @@
+# >>> AOF recipient guard — never send to removed area managers (added by step2b)
+import os as _aof_os, re as _aof_re, smtplib as _aof_smtplib
+_AOF_BLOCKED = ('a.alsharif@aofgroup.com', 'n.alzahrani@aofgroup.com')
+def _aof_blocked(addr):
+    return any(b in str(addr).lower() for b in _AOF_BLOCKED)
+for _aof_k, _aof_v in list(_aof_os.environ.items()):
+    _aof_parts = [p for p in _aof_re.split(r"[,;\s]+", _aof_v.strip()) if p]
+    if _aof_parts and all("@" in p for p in _aof_parts) and any(_aof_blocked(p) for p in _aof_parts):
+        _aof_sep = _aof_re.search(r"\s*[,;\n]\s*", _aof_v)
+        _aof_os.environ[_aof_k] = (_aof_sep.group(0) if _aof_sep else ",").join(
+            p for p in _aof_parts if not _aof_blocked(p))
+if not getattr(_aof_smtplib.SMTP.sendmail, "_aof_guard", False):
+    _aof_orig_sendmail = _aof_smtplib.SMTP.sendmail
+    def _aof_sendmail(self, from_addr, to_addrs, msg, *args, **kwargs):
+        to_addrs = [to_addrs] if isinstance(to_addrs, str) else list(to_addrs)
+        to_addrs = [t for t in to_addrs if str(t).strip() and not _aof_blocked(t)]
+        return _aof_orig_sendmail(self, from_addr, to_addrs, msg, *args, **kwargs) if to_addrs else {}
+    _aof_sendmail._aof_guard = True
+    _aof_smtplib.SMTP.sendmail = _aof_sendmail
+# <<< AOF recipient guard
+
 import requests
 import pytz
 import pandas as pd
